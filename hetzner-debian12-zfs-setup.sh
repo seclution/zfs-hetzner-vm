@@ -134,6 +134,7 @@ function check_prerequisites {
     echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
     exit 1
   fi
+  apt update
   if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
     apt install --yes dialog
   fi
@@ -499,6 +500,11 @@ ask_root_password
 ask_hostname
 
 determine_kernel_variant
+
+# ensure leftover mounts from previous runs do not interfere
+unmount_and_export_fs
+mkdir -p "$c_zfs_mount_dir"
+rm -rf "${c_zfs_mount_dir:?}/"*
 
 clear
 
