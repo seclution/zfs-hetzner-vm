@@ -21,20 +21,20 @@ export TMPDIR=/tmp
 export DEBIAN_FRONTEND=noninteractive
 
 # Variables
-v_bpool_name=
-v_bpool_tweaks=
-v_rpool_name=
-v_rpool_tweaks=
+v_bpool_name="bpool"
+v_bpool_tweaks="$c_default_bpool_tweaks"
+v_rpool_name="rpool"
+v_rpool_tweaks="$c_default_rpool_tweaks"
 declare -a v_selected_disks
-v_swap_size=                 # integer
-v_free_tail_space=           # integer
+v_swap_size=0                # integer
+v_free_tail_space=0          # integer
 v_hostname=
-v_kernel_variant=
-v_zfs_arc_max_mb=
+v_kernel_variant=""
+v_zfs_arc_max_mb=8192
 v_root_password=
-v_encrypt_rpool=             # 0=false, 1=true
+v_encrypt_rpool=1            # 0=false, 1=true
 v_passphrase=
-v_zfs_experimental=
+v_zfs_experimental=0
 v_suitable_disks=()
 
 # Constants
@@ -372,6 +372,21 @@ function ask_encryption {
   set -x
 }
 
+function ask_passphrase {
+  print_step_info_header
+
+  set +x
+  local passphrase_invalid_message=
+  local passphrase_repeat=-
+  while [[ "$v_passphrase" != "$passphrase_repeat" || ${#v_passphrase} -lt 8 ]]; do
+    v_passphrase=$(dialog --passwordbox "${passphrase_invalid_message}Please enter the passphrase for the root pool (8 chars min.):" 30 100 3>&1 1>&2 2>&3)
+    passphrase_repeat=$(dialog --passwordbox "Please repeat the passphrase:" 30 100 3>&1 1>&2 2>&3)
+
+    passphrase_invalid_message="Passphrase too short, or not matching! "
+  done
+  set -x
+}
+
 function ask_zfs_experimental {
   print_step_info_header
 
@@ -466,21 +481,18 @@ display_intro_banner
 
 find_suitable_disks
 
+
 select_disks
 
-ask_swap_size
+# parameters are pre-set, show their values
+print_variables v_swap_size v_free_tail_space
+print_variables v_bpool_name v_rpool_name
+print_variables v_bpool_tweaks v_rpool_tweaks
 
-ask_free_tail_space
+# always use encrypted rpool; ask only for passphrase
+ask_passphrase
 
-ask_pool_names
-
-ask_pool_tweaks
-
-ask_encryption
-
-ask_zfs_arc_max_size
-
-ask_zfs_experimental
+print_variables v_zfs_arc_max_mb v_zfs_experimental
 
 ask_root_password
 
@@ -663,6 +675,10 @@ Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 
+# ensure the ethernet driver is included in initramfs for remote unlocking
+driver=$(grep DRIVER /sys/class/net/eth0/device/uevent | cut -d= -f2)
+echo "$driver" >> "$c_zfs_mount_dir/etc/initramfs-tools/modules"
+
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
   mount --rbind "/$virtual_fs_dir" "$c_zfs_mount_dir/$virtual_fs_dir"
@@ -791,7 +807,7 @@ else
 fi
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
+chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0 biosdevname=0\"|' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=$v_rpool_name/ROOT/debian\"|g' /etc/default/grub"
 
 chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
@@ -809,6 +825,10 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   
   mkdir -p "$c_zfs_mount_dir/etc/dropbear/initramfs"
   cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear/initramfs/authorized_keys"
+
+  cat > "$c_zfs_mount_dir/etc/dropbear/initramfs/dropbear.conf" <<'CONF'
+DROPBEAR_OPTIONS="-p 605 -s -j -k -I 60"
+CONF
 
   cp "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
   chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_rsa_key_temp"

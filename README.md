@@ -50,6 +50,10 @@ wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzne
 
 Answer script questions about desired hostname and ZFS ARC cache size.
 
+If root pool encryption is enabled, the installer configures Dropbear in the initramfs
+listening on port 605. You can unlock the encrypted root over SSH using the same
+authorized key you provided for installation.
+
 To cope with network failures its higly recommended to run the commands above inside screen console, type `man screen` for more info.
 Example of screen utility usage:
 
