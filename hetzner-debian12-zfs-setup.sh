@@ -592,7 +592,7 @@ echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
-  -O mountpoint=none -R $c_zfs_mount_dir -f \
+  -O canmount=off -O mountpoint=none -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
 
 zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
