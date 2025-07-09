@@ -20,6 +20,21 @@ set -o nounset
 export TMPDIR=/tmp
 export DEBIAN_FRONTEND=noninteractive
 
+# Constants
+c_deb_packages_repo=https://deb.debian.org/debian
+c_deb_security_repo=https://deb.debian.org/debian-security
+
+c_default_zfs_arc_max_mb=250
+c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
+c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
+c_default_hostname=terem
+c_zfs_mount_dir=/mnt
+c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
+c_install_log=$c_log_dir/install.log
+c_lsb_release_log=$c_log_dir/lsb_release.log
+c_disks_log=$c_log_dir/disks.log
+c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
+
 # Variables
 v_bpool_name="bpool"
 v_bpool_tweaks="$c_default_bpool_tweaks"
@@ -36,21 +51,6 @@ v_encrypt_rpool=1            # 0=false, 1=true
 v_passphrase=
 v_zfs_experimental=0
 v_suitable_disks=()
-
-# Constants
-c_deb_packages_repo=https://deb.debian.org/debian
-c_deb_security_repo=https://deb.debian.org/debian-security
-
-c_default_zfs_arc_max_mb=250
-c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
-c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
-c_default_hostname=terem
-c_zfs_mount_dir=/mnt
-c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
-c_install_log=$c_log_dir/install.log
-c_lsb_release_log=$c_log_dir/lsb_release.log
-c_disks_log=$c_log_dir/disks.log
-c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
 
 function activate_debug {
   mkdir -p "$c_log_dir"
