@@ -503,17 +503,6 @@ ask_hostname
 
 determine_kernel_variant
 
-# ensure leftover mounts from previous runs do not interfere
-if command -v zfs >/dev/null; then
-  rm -f "$(command -v zfs)"
-fi
-if command -v zpool >/dev/null; then
-  rm -f "$(command -v zpool)"
-fi
-unmount_and_export_fs
-mkdir -p "$c_zfs_mount_dir"
-rm -rf "${c_zfs_mount_dir:?}/"*
-
 clear
 
 echo "===========remove unused kernels in rescue system========="
