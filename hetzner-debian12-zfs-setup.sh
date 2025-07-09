@@ -504,6 +504,12 @@ ask_hostname
 determine_kernel_variant
 
 # ensure leftover mounts from previous runs do not interfere
+if command -v zfs >/dev/null; then
+  rm -f "$(command -v zfs)"
+fi
+if command -v zpool >/dev/null; then
+  rm -f "$(command -v zpool)"
+fi
 unmount_and_export_fs
 mkdir -p "$c_zfs_mount_dir"
 rm -rf "${c_zfs_mount_dir:?}/"*
@@ -526,16 +532,18 @@ echo "======= installing zfs on rescue system =========="
 #  echo "y" | zfs
 # linux-headers-generic linux-image-generic
   apt install --yes software-properties-common dpkg-dev dkms
-  rm -f "$(which zfs)"
-  rm -f "$(which zpool)"
-  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
+  rm -f "$(which zfs || true)"
+  rm -f "$(which zpool || true)"
+  cat > /etc/apt/sources.list.d/bookworm-testing.list <<CONF
+deb http://deb.debian.org/debian/ testing main contrib non-free
+CONF
   echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update  
+  apt update
   apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
   rm /etc/apt/sources.list.d/bookworm-testing.list
   rm /etc/apt/preferences.d/90_zfs
   apt update
-  export PATH=$PATH:/usr/sbin
+  export PATH=$PATH:/usr/sbin:/sbin
   zfs --version
 
 echo "======= partitioning the disk =========="
