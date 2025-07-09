@@ -407,7 +407,9 @@ function unmount_and_export_fs {
   print_step_info_header
 
   for virtual_fs_dir in dev sys proc; do
-    umount --recursive --force --lazy "$c_zfs_mount_dir/$virtual_fs_dir"
+    if [[ -d "$c_zfs_mount_dir/$virtual_fs_dir" ]] && mountpoint -q "$c_zfs_mount_dir/$virtual_fs_dir"; then
+      umount --recursive --force --lazy "$c_zfs_mount_dir/$virtual_fs_dir"
+    fi
   done
 
   local max_unmount_wait=5
