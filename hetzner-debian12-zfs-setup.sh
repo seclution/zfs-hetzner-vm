@@ -680,6 +680,11 @@ Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 
+
+# sicherstellen, dass das Verzeichnis und die Datei existieren
+mkdir -p "$c_zfs_mount_dir/etc/initramfs-tools"
+touch    "$c_zfs_mount_dir/etc/initramfs-tools/modules"
+
 # ensure the ethernet driver is included in initramfs for remote unlocking
 driver=$(grep DRIVER /sys/class/net/eth0/device/uevent | cut -d= -f2)
 echo "$driver" >> "$c_zfs_mount_dir/etc/initramfs-tools/modules"
