@@ -140,48 +140,63 @@ function check_prerequisites {
   fi
 }
 
-function initial_load_debian_zed_cache {
+function initial_load_debian_zfs_cache {
   print_step_info_header
 
   local cache_dir="$c_zfs_mount_dir/etc/zfs/zfs-list.cache"
   local cache_file="$cache_dir/$v_rpool_name"
-  local max_wait=30       # Max. Wartezeit für ZED (in Sekunden)
-  local interval=2        # Poll-Interval für ZED
+  local max_wait=60    # Sekunden, bis zum Fallback
+  local interval=2     # Poll-Intervall
   local elapsed=0
 
-  # 1) Cache-Verzeichnis anlegen und Cacher-Skript verlinken
-  chroot_execute "mkdir -p $cache_dir"
-  chroot_execute "touch $cache_file"
+  echo "[$(date)] DEBUG: Starte initial_load_debian_zfs_cache" >> "$c_install_log"
+  echo "[$(date)] DEBUG: Cache-Verzeichnis: $cache_dir"       >> "$c_install_log"
+
+  # 1) Verzeichnis & Dummy-File anlegen, Cacher-Skript verlinken
+  chroot_execute "mkdir -p $cache_dir && touch $cache_file"
+  echo "[$(date)] DEBUG: Angelegt $cache_file"                >> "$c_install_log"
   chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
+  echo "[$(date)] DEBUG: Cacher-Skript gelinkt"              >> "$c_install_log"
 
-  # 2) ZED im Vordergrund starten
-  chroot_execute "zed -F &"
-  sleep 1
+  # 2) ZED im Vordergrund starten und PID speichern
+  chroot_execute "zed -F & echo \$! > /tmp/zed.pid"
+  echo "[$(date)] DEBUG: ZED gestartet (PID in chroot:/tmp/zed.pid)" >> "$c_install_log"
 
-  # 3) Auf Füllung warten
+  # 3) Warten, bis Cache-Datei gefüllt ist
   while (( elapsed < max_wait )); do
-    local size
-    size=$(stat -c%s "$c_zfs_mount_dir/$cache_file" 2>/dev/null || echo 0)
-    if (( size > 0 )); then
-      echo "ZFS-Cache erfolgreich erzeugt (Größe: ${size} Bytes nach ${elapsed}s)"
+    if [[ -s "$c_zfs_mount_dir$cache_file" ]]; then
+      echo "[$(date)] DEBUG: Cache-Datei gefüllt nach ${elapsed}s" >> "$c_install_log"
       break
     fi
     sleep $interval
     (( elapsed += interval ))
+    echo "[$(date)] DEBUG: Warte auf Cache-Datei (${elapsed}/${max_wait})" >> "$c_install_log"
   done
 
-  # 4) ZED beenden (falls noch läuft)
-  chroot_execute "pkill zed" &>/dev/null || true
-
-  # 5) Wenn ZED fehlschlägt: manuellen Fallback
-  if (( elapsed >= max_wait )); then
-    echo "WARNUNG: ZED-Cache nicht in ${max_wait}s erzeugt – fallback per 'zfs list'."
-    chroot_execute "zfs list -H -o name > $cache_file"
+  # 4) ZED beenden
+  local zpid
+  zpid=$(chroot_execute "cat /tmp/zed.pid" 2>/dev/null || echo "")
+  if [[ $zpid =~ ^[0-9]+$ ]]; then
+    chroot_execute "kill $zpid" || true
+    echo "[$(date)] DEBUG: ZED (PID $zpid) beendet" >> "$c_install_log"
+  else
+    echo "[$(date)] WARN: Konnte ZED-PID nicht auslesen" >> "$c_install_log"
   fi
 
-  # 6) Pfade in der Cache-Datei anpassen
-  sed -Ei "s|$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/$cache_file"
+  # 5) Fallback, falls nach max_wait immer noch leer
+  if (( elapsed >= max_wait )); then
+    echo "[$(date)] WARN: ZED-Cache nicht in ${max_wait}s erzeugt – fallback per 'zfs list'" >> "$c_install_log"
+    chroot_execute "zfs list -H -o name > $cache_file"
+    echo "[$(date)] DEBUG: Fallback-Cache erzeugt via zfs list" >> "$c_install_log"
+  fi
+
+  # 6) Pfade in der Cache-Datei korrigieren, damit initramfs sie richtig aufsammelt
+  sed -Ei "s|$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir$cache_file"
+  echo "[$(date)] DEBUG: Pfade in $cache_file angepasst" >> "$c_install_log"
+
+  echo "[$(date)] DEBUG: initial_load_debian_zfs_cache fertig" >> "$c_install_log"
 }
+
 
 
 
