@@ -592,8 +592,12 @@ echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
-  -O mountpoint=/ -R $c_zfs_mount_dir -f \
+  -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
+
+zfs set mountpoint=none rpool
+zfs set mountpoint=/ rpool/ROOT/debian
+zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
 
 # shellcheck disable=SC2086
 zpool create \
@@ -895,14 +899,6 @@ chmod 755 "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/stat
 
 chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
 
-echo "======= update initramfs =========="
-chroot_execute "update-initramfs -u -k all"
-
-chroot_execute "apt remove cryptsetup* --yes"
-
-echo "======= update grub =========="
-chroot_execute "update-grub"
-
 echo "======= setting up zed =========="
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "zfs set canmount=noauto $v_rpool_name"
@@ -933,6 +929,14 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 chroot_execute "echo RESUME=none > /etc/initramfs-tools/conf.d/resume"
+
+echo "======= update initramfs =========="
+chroot_execute "update-initramfs -u -k all"
+
+chroot_execute "apt remove cryptsetup* --yes"
+
+echo "======= update grub =========="
+chroot_execute "update-grub"
 
 echo "======= unmounting filesystems and zfs pools =========="
 unmount_and_export_fs
