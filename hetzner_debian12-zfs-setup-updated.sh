@@ -145,20 +145,20 @@ function initial_load_debian_zed_cache {
 
   local cache_dir="$c_zfs_mount_dir/etc/zfs/zfs-list.cache"
   local cache_file="$cache_dir/$v_rpool_name"
-  local max_wait=120       # Max Wartezeit in Sekunden
-  local interval=2         # Poll-Intervall
+  local max_wait=30       # Max. Wartezeit für ZED (in Sekunden)
+  local interval=2        # Poll-Interval für ZED
   local elapsed=0
 
-  # 1) Cache-Verzeichnis anlegen und Skript verlinken
+  # 1) Cache-Verzeichnis anlegen und Cacher-Skript verlinken
   chroot_execute "mkdir -p $cache_dir"
   chroot_execute "touch $cache_file"
   chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
 
   # 2) ZED im Vordergrund starten
   chroot_execute "zed -F &"
-  sleep 1  # kurz warten, bis daemon läuft
+  sleep 1
 
-  # 3) Auf Füllung der Cache-Datei warten
+  # 3) Auf Füllung warten
   while (( elapsed < max_wait )); do
     local size
     size=$(stat -c%s "$c_zfs_mount_dir/$cache_file" 2>/dev/null || echo 0)
@@ -170,17 +170,19 @@ function initial_load_debian_zed_cache {
     (( elapsed += interval ))
   done
 
-  # 4) ZED beenden und Pfade korrigieren
-  chroot_execute "pkill zed" || true
+  # 4) ZED beenden (falls noch läuft)
+  chroot_execute "pkill zed" &>/dev/null || true
 
+  # 5) Wenn ZED fehlschlägt: manuellen Fallback
   if (( elapsed >= max_wait )); then
-    echo "WARNUNG: ZED-Cache konnte nicht innerhalb von ${max_wait}s erzeugt werden."
-    echo "Install-Script fährt fort, Initramfs kann später Lock-Key nicht automatisch laden."
-  else
-    # Relativpfade in der Cache-Datei anpassen
-    sed -Ei "s|$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/$cache_file"
+    echo "WARNUNG: ZED-Cache nicht in ${max_wait}s erzeugt – fallback per 'zfs list'."
+    chroot_execute "zfs list -H -o name > $cache_file"
   fi
+
+  # 6) Pfade in der Cache-Datei anpassen
+  sed -Ei "s|$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/$cache_file"
 }
+
 
 
 function find_suitable_disks {
