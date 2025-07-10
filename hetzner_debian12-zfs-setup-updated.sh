@@ -141,39 +141,47 @@ function check_prerequisites {
 }
 
 function initial_load_debian_zed_cache {
-  chroot_execute "mkdir /etc/zfs/zfs-list.cache"
-  chroot_execute "touch /etc/zfs/zfs-list.cache/$v_rpool_name"
+  print_step_info_header
+
+  local cache_dir="$c_zfs_mount_dir/etc/zfs/zfs-list.cache"
+  local cache_file="$cache_dir/$v_rpool_name"
+  local max_wait=120
+  local interval=2
+  local elapsed=0
+
+  # 1) Sicherstellen, dass das Cache-Verzeichnis existiert
+  chroot_execute "mkdir -p $cache_dir"
+  chroot_execute "touch $cache_file"
   chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
 
+  # 2) ZED im Vordergrund starten
   chroot_execute "zed -F &"
+  sleep 1  # kurz warten, bis zed anfängt zu laufen
 
-  local success=0
+  # 3) Warten, bis Cache gefüllt ist
+  while [[ $elapsed -lt $max_wait ]]; do
+    # Größe prüfen
+    size=$(stat -c%s "$c_zfs_mount_dir/$cache_file" 2>/dev/null || echo 0)
+    if (( size > 0 )); then
+      echo "ZFS-Cache erfolgreich erzeugt (Größe: ${size} Bytes nach ${elapsed}s)"
+      break
+    fi
+    sleep $interval
+    (( elapsed += interval ))
+  done
 
-  if [[ ! -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] || [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then  
-    chroot_execute "zfs set canmount=noauto $v_rpool_name"
+  # 4) Aufräumen und Fehlerbehandlung
+  chroot_execute "pkill zed" || true
 
-    SECONDS=0
-
-    while (( SECONDS++ <= 120 )); do
-      if [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) > 0 )); then
-        success=1
-        break
-      else
-        sleep 1
-      fi
-    done
+  if (( elapsed >= max_wait )); then
+    echo "Warnung: ZED-Cache konnte nicht innerhalb von ${max_wait}s erzeugt werden."
+    echo "Fortfahren, aber Initramfs kann später keinen Lock-Key finden."
+    # Optional: hier noch einen Fallback-Mechanismus einbauen, z.B.:
+    # chroot_execute "zfs set canmount=noauto $v_rpool_name"
   else
-    success=1
+    # Pfade in der Cache-Datei korrigieren (relativer Pfad statt /mnt)
+    sed -Ei "s|$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/$cache_file"
   fi
-
-  if (( success != 1 )); then
-    echo "Fatal zed daemon error: the ZFS cache hasn't been updated by ZED!"
-    exit 1
-  fi
-
-  chroot_execute "pkill zed"
-
-  sed -Ei "s|/$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name"
 }
 
 function find_suitable_disks {
