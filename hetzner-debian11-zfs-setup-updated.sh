@@ -9,13 +9,7 @@ fi
 
 echo "[INFO] APT-Cache aktualisieren und alte Kernel entfernen"
 apt-get update
-apt-get autoremove --purge -y
-rm -rf /lib/modules/* 2>/dev/null || true
 
-echo "[INFO] merged-/usr Layout erzwingen"
-export DEBIAN_FRONTEND=noninteractive
-apt-get install -y apt-utils usrmerge
-apt-get install --reinstall -y base-files
 
 # jetzt weiter mit dem Original-Script...
 
