@@ -1,17 +1,4 @@
  #!/bin/bash
-################################################################################
-# Auto‐cleanup: Testing-Repo deaktivieren, alte Kernel löschen, merged-/usr
-################################################################################
-if [[ -f /etc/apt/sources.list.d/bookworm-testing.list ]]; then
-  echo "[INFO] Deaktiviere Testing-Repo"
-  mv /etc/apt/sources.list.d/bookworm-testing.list{,.disabled}
-fi
-
-echo "[INFO] APT-Cache aktualisieren und alte Kernel entfernen"
-apt-get update
-
-
-# jetzt weiter mit dem Original-Script...
 
 : <<'end_header_info'
 (c) Andrey Prokopenko job@terem.fr
