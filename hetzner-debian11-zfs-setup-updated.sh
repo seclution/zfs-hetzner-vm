@@ -124,6 +124,7 @@ function store_os_distro_information {
 function check_prerequisites {
   # shellcheck disable=SC2119
   apt update
+  rm -f /etc/apt/sources.list.d/bookworm-testing.list
   print_step_info_header
   if [[ $(id -u) -ne 0 ]]; then
     echo 'This script must be run with administrative privileges!'
@@ -404,6 +405,16 @@ function chroot_execute {
   chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
 }
 
+# wait until dpkg/apt locks are released inside chroot
+function chroot_wait_for_apt {
+  chroot_execute 'while fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+    || fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+    || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
+    || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      sleep 1
+  done'
+}
+
 function unmount_and_export_fs {
   # shellcheck disable=SC2119
   print_step_info_header
@@ -492,6 +503,8 @@ determine_kernel_variant
 clear
 
 echo "===========remove unused kernels in rescue system========="
+rm -rf /lib/modules 2>/dev/null || true
+mkdir -p /lib/modules
 for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
   apt purge --yes "linux-headers-$kver"
   apt purge --yes "linux-image-$kver"
@@ -657,7 +670,25 @@ deb $c_deb_security_repo bullseye-security main contrib non-free
 deb $c_deb_packages_repo bullseye-backports main contrib non-free
 CONF
 
-chroot_execute "apt update"
+# block any testing packages
+cat > "$c_zfs_mount_dir/etc/apt/preferences.d/90-no-testing" <<'EOF'
+Package: *
+Pin: release a=testing
+Pin-Priority: -1
+EOF
+echo 'APT::Default-Release "bullseye";' > "$c_zfs_mount_dir/etc/apt/apt.conf.d/90defaultrelease"
+
+echo "[STEP] Aktualisiere APT (nur Bullseye)"
+chroot_execute "apt-get clean"
+chroot_execute "systemctl stop unattended-upgrades 2>/dev/null || true"
+chroot_execute "pkill -9 unattended-upgrade 2>/dev/null || true"
+chroot_wait_for_apt
+chroot_execute "apt-get update"
+
+# enforce merged-/usr before installing other packages
+chroot_execute "echo 'usrmerge usrmerge/convert-usrmerge boolean true' | debconf-set-selections"
+chroot_execute "apt-get -y install usrmerge"
+chroot_execute "apt-get -y --allow-downgrades install base-files/bullseye"
 
 echo "======= setting locale, console and language =========="
 chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils"
