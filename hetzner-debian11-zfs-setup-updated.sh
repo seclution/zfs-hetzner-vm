@@ -1,4 +1,37 @@
- #!/bin/bash
+#!/bin/bash
+export DEBIAN_FRONTEND=noninteractive
+
+# --- block: clean apt sources + pin only bullseye ------------------
+rm -f /etc/apt/sources.list.d/bookworm-testing.list  # kill testing repo
+
+cat >/etc/apt/preferences.d/90-no-testing <<'EOF'
+Package: *
+Pin: release a=testing
+Pin-Priority: -1
+EOF
+
+echo 'APT::Default-Release "bullseye";' >/etc/apt/apt.conf.d/90defaultrelease
+apt-get clean
+apt-get update
+
+echo "usrmerge usrmerge/convert-usrmerge boolean true" | debconf-set-selections
+apt-get -y \
+  -o Dpkg::Options::="--force-confdef" \
+  -o Dpkg::Options::="--force-confold" \
+  install usrmerge
+apt-get -y --allow-downgrades install base-files/bullseye
+
+stop_apt_locks() {
+  systemctl stop unattended-upgrades 2>/dev/null || true
+  pkill -9 unattended-upgrade 2>/dev/null || true
+  while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+        fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+        fuser /var/cache/debconf/config.dat >/dev/null 2>&1; do
+    echo "[INFO] waiting for apt lock …"
+    sleep 3
+  done
+}
+stop_apt_locks
 
 : <<'end_header_info'
 (c) Andrey Prokopenko job@terem.fr
@@ -511,19 +544,11 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-#  echo "y" | zfs
-# linux-headers-generic linux-image-generic
-  apt install --yes software-properties-common dpkg-dev dkms
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   rm -f "$(which zfs)"
   rm -f "$(which zpool)"
-  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
-  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update  
-  apt install -t testing --yes zfs-dkms zfsutils-linux
-  rm /etc/apt/sources.list.d/bookworm-testing.list
-  rm /etc/apt/preferences.d/90_zfs
-  apt update
+  stop_apt_locks
+  apt-get -y install build-essential dkms zfs-dkms zfsutils-linux
   export PATH=$PATH:/usr/sbin
   zfs --version
 
