@@ -536,9 +536,10 @@ echo "======= vorbereiten der Paketquellen =========="
 cat >/etc/apt/sources.list <<'EOF'
 deb https://deb.debian.org/debian          bookworm          main contrib non-free-firmware
 deb https://deb.debian.org/debian-security bookworm-security main contrib non-free-firmware
-deb https://deb.debian.org/debian-update   bookworm-updates  main contrib non-free-firmware
+deb https://deb.debian.org/debian          bookworm-updates  main contrib non-free-firmware
 EOF
-apt-get update -y
+apt-get -o Acquire::Retries=3 update -y
+sed -i 's|^deb .*snapshot.debian.org|#&|' /etc/apt/sources.list.d/*.list 2>/dev/null || true
 
 # vollst\xc3\xa4ndige Toolchain + Header f\xc3\xbcr aktuellen Rescue-Kernel
 apt-get install -y --no-install-recommends build-essential dkms \
@@ -918,7 +919,7 @@ echo "======= setting up zed =========="
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "zfs set canmount=noauto $v_rpool_name"
 else
-  initial_load_debian_zed_cache
+  initial_load_debian_zfs_cache
 fi
 
 echo "======= setting mountpoints =========="
