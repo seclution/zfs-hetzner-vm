@@ -532,23 +532,33 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
   fi
 done
 
-echo "======= installing zfs on rescue system =========="
+echo "======= vorbereiten der Paketquellen =========="
+cat >/etc/apt/sources.list <<'EOF'
+deb https://deb.debian.org/debian          bookworm          main contrib non-free-firmware
+deb https://deb.debian.org/debian-security bookworm-security main contrib non-free-firmware
+deb https://deb.debian.org/debian-update   bookworm-updates  main contrib non-free-firmware
+EOF
+apt-get update -y
 
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-#  echo "y" | zfs
-# linux-headers-generic linux-image-generic
-  apt install --yes software-properties-common dpkg-dev dkms
-  rm -f "$(which zfs)"
-  rm -f "$(which zpool)"
-  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
-  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update  
-  apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
-  rm /etc/apt/sources.list.d/bookworm-testing.list
-  rm /etc/apt/preferences.d/90_zfs
-  apt update
-  export PATH=$PATH:/usr/sbin
-  zfs --version
+# vollst\xc3\xa4ndige Toolchain + Header f\xc3\xbcr aktuellen Rescue-Kernel
+apt-get install -y --no-install-recommends build-essential dkms \
+    linux-headers-$(uname -r) 2>/dev/null || {
+    # Fallback, falls es f\xc3\xbcr diesen Kernel keine Header gibt:
+    apt-get install -y --no-install-recommends linux-image-amd64 linux-headers-amd64
+    NEED_REBOOT=1
+}
+
+if [ "${NEED_REBOOT:-0}" -eq 1 ]; then
+    echo "Kernel wurde aktualisiert \xe2\x80\x93 bitte Rescue neu booten und Skript erneut starten."
+    exit 1
+fi
+
+# ZFS aus Bookworm-Stable
+echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
+apt-get install -y zfs-dkms zfsutils-linux
+
+export PATH=$PATH:/usr/sbin
+zfs --version
 
 echo "======= partitioning the disk =========="
 
