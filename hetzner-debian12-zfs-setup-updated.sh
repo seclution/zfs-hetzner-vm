@@ -586,13 +586,20 @@ echo "======= create zfs pools and datasets =========="
     bpool_disks_partitions+=("${selected_disk}-part2")
   done
 
+  pools_mirror_option=
+  if [[ ${#v_selected_disks[@]} -gt 1 ]]; then
+    if dialog --defaultno --yesno "Do you want to use mirror mode for ${v_selected_disks[*]}?" 30 100; then 
+      pools_mirror_option=mirror
+    fi
+  fi
+
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
   -m none \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
-  -R $c_zfs_mount_dir -f \
+  -O mountpoint=/ -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
 
 # shellcheck disable=SC2086
@@ -631,8 +638,6 @@ zfs create                                 "$v_rpool_name/var/mail"
 
 zfs create -o com.sun:auto-snapshot=false -o canmount=on -o mountpoint=/tmp "$v_rpool_name/tmp"
 chmod 1777 "$c_zfs_mount_dir/tmp"
-
-zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
 
 if [[ $v_swap_size -gt 0 ]]; then
   zfs create \
