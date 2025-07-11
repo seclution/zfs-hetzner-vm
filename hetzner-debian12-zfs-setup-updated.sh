@@ -595,8 +595,6 @@ echo -n "$v_passphrase" | zpool create \
   -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
 
-zfs set mountpoint=none rpool
-zfs set mountpoint=/ rpool/ROOT/debian
 zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
 
 # shellcheck disable=SC2086
