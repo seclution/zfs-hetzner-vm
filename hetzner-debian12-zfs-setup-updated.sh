@@ -595,8 +595,6 @@ echo -n "$v_passphrase" | zpool create \
   -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
 
-zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
-
 # shellcheck disable=SC2086
 zpool create \
   -m none \
@@ -633,6 +631,8 @@ zfs create                                 "$v_rpool_name/var/mail"
 
 zfs create -o com.sun:auto-snapshot=false -o canmount=on -o mountpoint=/tmp "$v_rpool_name/tmp"
 chmod 1777 "$c_zfs_mount_dir/tmp"
+
+zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
 
 if [[ $v_swap_size -gt 0 ]]; then
   zfs create \
