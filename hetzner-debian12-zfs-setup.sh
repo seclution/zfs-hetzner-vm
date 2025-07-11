@@ -470,7 +470,13 @@ function unmount_and_export_fs {
     echo "failed to export zfs pools"
     exit 1
   fi
+
 }
+post_boot_cleanup() {
+  zfs set mountpoint=legacy  "$v_bpool_name/BOOT/debian"
+  zfs set mountpoint=none    "$v_rpool_name"
+}
+
 
 #################### MAIN ################################
 export LC_ALL=en_US.UTF-8
@@ -584,18 +590,19 @@ echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
-  -O mountpoint=/ -R $c_zfs_mount_dir -f \
-  $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
+  -O mountpoint=none -R "$c_zfs_mount_dir" -f \
+  "$v_rpool_name" $pools_mirror_option "${rpool_disks_partitions[@]}"
+zfs create -o canmount=off   -o mountpoint=none      "$v_rpool_name/ROOT"
+zfs create -o canmount=noauto -o mountpoint=/        "$v_rpool_name/ROOT/debian"
+zpool set bootfs="$v_rpool_name/ROOT/debian" "$v_rpool_name"
 
 # shellcheck disable=SC2086
 zpool create \
   -m none \
   -o cachefile=/etc/zpool.cache \
   -o compatibility=grub2 \
-  -O mountpoint=/boot -R $c_zfs_mount_dir -f \
-  $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
-
-zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
+  -O mountpoint=/boot -R "$c_zfs_mount_dir" -f \
+  "$v_bpool_name" $pools_mirror_option "${bpool_disks_partitions[@]}"
 zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
 
 zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/debian"
@@ -604,8 +611,10 @@ zfs mount "$v_rpool_name/ROOT/debian"
 zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
 zfs mount "$v_bpool_name/BOOT/debian"
 
+
 zfs create                                 "$v_rpool_name/home"
 #zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
+mkdir -p "$c_zfs_mount_dir/var"                     # stellt /mnt/var sicher
 zfs create -o canmount=off                 "$v_rpool_name/var"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
@@ -907,6 +916,7 @@ chroot_execute "apt remove cryptsetup* --yes"
 
 echo "======= update grub =========="
 chroot_execute "update-grub"
+post_boot_cleanup   # jetzt /boot aushängen & Mountpoints finalisieren
 
 echo "======= setting up zed =========="
 if [[ $v_zfs_experimental == "1" ]]; then
